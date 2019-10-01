@@ -1,0 +1,143 @@
+---
+title: "6AM Health"
+output: 
+  flexdashboard::flex_dashboard:
+    #logo: logo.png
+    orientation: rows
+    social: menu
+runtime: shiny
+---
+
+```{r}
+library(flexdashboard)
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+#library(shiny)
+library(data.table)
+```
+
+
+
+```{r global, include=FALSE}
+# load data in 'global' chunk so it can be shared by all users of the dashboard
+df <- readr::read_csv("Sales_Byte_ARS_Data_Management - Sales Transactions.csv")
+df$Date <- as.Date(df$Date,"%m/%d/%Y")
+summary(df)
+
+daily_sales <- df %>% group_by(Date) %>% 
+  summarise(total_sales_dollar = sum(Total), total_sales_qty = sum(Qty))
+
+daily_sales_by_ftype <- df %>% group_by(Date, Fridge_Type) %>% 
+  summarise(total_sales_dollar = sum(Total), total_sales_qty = sum(Qty))
+
+daily_sales_by_location <- df %>% 
+  group_by(Date,Kiosk,Fridge_Type) %>% 
+  summarise(total_sales_dollar = sum(Total), total_sales_qty = sum(Qty))
+
+daily_sales_by_product <- df %>%
+  group_by(Date, Product) %>%
+  summarise(total_sales_dollar = sum(Total), total_sales_qty = sum(Qty))
+```
+
+
+
+
+Sidebar {.sidebar}
+=====================================
+
+```{r}
+dateRangeInput(inputId = 'Date',
+                     label = 'Select a date range:',
+                     start = '2019-03-19',
+                      end = '2019-09-23',
+                    format = 'yyyy-mm-dd')
+
+selectizeInput(inputId = "Fridge_Type", label = strong("Fridge Type"),
+                  choices = unique(daily_sales_by_ftype$Fridge_Type),multiple=TRUE,
+                  options = list(placeholder='select a fridge type'))
+
+selectizeInput(inputId = 'Kiosk', label=strong('Kiosk'),
+                  choices = unique(daily_sales_by_location$Kiosk),multiple=TRUE,
+                  options = list(placeholder='select a kiosk'))
+
+selectizeInput(inputId= 'Product', label=strong('Product'),
+                     choices = unique(daily_sales_by_product$Product),multiple=TRUE,
+                     options = list(placeholder='select a product'))
+```
+
+Dashboard
+=======================================================================
+
+Row
+-----------------------------------------------------------------------
+
+### Total sales to date {.value-box}
+
+```{r}
+totalsales <- reactive({
+  totalsales <- summarise(daily_sales, total = sum(total_sales_dollar))
+})
+  
+renderValueBox({
+  sales <- paste('$',totalsales())
+  valueBox(
+    value = sales, 
+    icon='fa-area-chart',
+    color = 'green'
+  )
+})
+
+
+```
+
+### Total sales in current month {.value-box}
+```{r}
+currentmonth <- month(Sys.Date())
+totalsales_current_month <- reactive({
+  sales <- daily_sales %>% mutate(month = month(Date)) %>% filter(month == currentmonth) %>% summarise(total = sum(total_sales_dollar))
+})
+
+renderValueBox({
+  sales <- paste('$',totalsales_current_month())
+  valueBox(
+    value = sales, 
+    icon='fa-area-chart',
+    color = 'green'
+  )
+})
+```
+
+### Total active fridge {.value-box}
+```{r}
+total_active_fridges <- reactive({
+  fridges <- length(unique(df$Kiosk))
+})
+
+renderValueBox({
+  fridges <- total_active_fridges()
+  valueBox(
+    value = fridges, 
+    icon='fa-area-chart',
+    color = 'green'
+  )
+})
+```
+
+
+Row
+-----------------------------------------------------------------------
+### Sales by Fridge Types{data-width=700}
+
+```{r}
+dsbf <- reactive({
+  daily_sales_by_ftype
+})
+
+renderPlot(
+    ggplot(dsbf(), aes(x=Date, y=total_sales_dollar, color=Fridge_Type))+geom_path()+ylab('Sales in $')
+    
+    )
+  
+```
+
